@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BCEG · Hub Digital — Habilitations utilisateur</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          canvas: '#F6F6F2', surface: '#FFFFFF', ink: '#242A1E',
+          forest: '#4D553D', 'forest-dark': '#373D2C', sage: '#A6AA9E',
+          'sage-soft': '#EEEEE8', leaf: '#8C9B5E', clay: '#B1543A', gold: '#B98F3D',
+        },
+        fontFamily: {
+          display: ['Space Grotesk', 'sans-serif'],
+          body: ['Inter', 'sans-serif'],
+          mono: ['IBM Plex Mono', 'monospace'],
+        },
+        boxShadow: {
+          card: '0 1px 2px rgba(36,42,30,0.04), 0 1px 1px rgba(36,42,30,0.03)',
+          panel: '-8px 0 30px rgba(36,42,30,0.10)',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  :root{ --line: rgba(77,85,61,0.14); }
+  * { scrollbar-width: thin; scrollbar-color: #C7CABB transparent; }
+  ::-webkit-scrollbar{ height:6px; width:6px; }
+  ::-webkit-scrollbar-thumb{ background:#C7CABB; border-radius:4px; }
+  body{ font-family:'Inter',sans-serif; }
+
+  .ecorce-bg{
+    background-image: repeating-linear-gradient(180deg, transparent 0 26px, rgba(166,170,158,0.5) 26px 27px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 42px, transparent 42px 84px);
+    background-color:#4D553D;
+  }
+  .ecorce-lines{
+    background-image: repeating-linear-gradient(180deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent 18px);
+  }
+
+  .drawer{ transition: transform .35s cubic-bezier(.22,.61,.36,1); }
+  .drawer-hidden{ transform: translateX(100%); }
+  .view{ display:none; }
+  .view.active{ display:block; }
+  input[type="checkbox"], input[type="radio"]{ accent-color:#4D553D; }
+  .code-box{ width:2.25rem; height:2.5rem; }
+  .status-dot{ box-shadow:0 0 0 3px rgba(140,155,94,0.18); }
+  .hidden-force{ display:none !important; }
+</style>
+</head>
+<body class="bg-canvas text-ink antialiased">
+
+<!-- ===================== ÉCRAN DE CONNEXION ===================== -->
+<div id="login-screen" class="min-h-screen flex items-center justify-center px-4 ecorce-bg">
+  <div class="ecorce-lines absolute inset-0 -z-10"></div>
+  <div class="w-full max-w-sm bg-surface rounded-2xl shadow-panel p-7">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-9 h-9 rounded-[8px] bg-forest text-white font-display font-bold text-sm flex items-center justify-center">B</div>
+      <div>
+        <p class="font-display font-semibold text-sm leading-tight">Hub Digital</p>
+        <p class="text-[11px] text-ink/45">BCEG · Habilitations</p>
+      </div>
+    </div>
+    <h1 class="font-display text-lg font-semibold mb-1">Connexion</h1>
+    <p class="text-xs text-ink/45 mb-5">Accédez au circuit de demande d'habilitation.</p>
+    <form id="login-form" class="space-y-3">
+      <div>
+        <label class="text-xs text-ink/50 mb-1 block">E-mail</label>
+        <input id="login-email" type="email" required placeholder="ssi1@bceg.ga" class="w-full px-3 py-2.5 text-sm rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none">
+      </div>
+      <div>
+        <label class="text-xs text-ink/50 mb-1 block">Mot de passe</label>
+        <input id="login-password" type="password" required placeholder="••••••••" class="w-full px-3 py-2.5 text-sm rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none">
+      </div>
+      <p id="login-error" class="text-xs text-clay hidden"></p>
+      <button type="submit" class="w-full bg-forest text-white text-sm font-medium py-2.5 rounded-lg hover:bg-forest-dark transition-colors">Se connecter</button>
+    </form>
+    <p class="text-[11px] text-ink/40 mt-4 leading-relaxed">Comptes de démonstration : metier / ssi1 / ssi2 / dsi @bceg.ga — mot de passe <span class="font-mono">demo1234</span> (créés via <span class="font-mono">npm run seed</span>).</p>
+  </div>
+</div>
+
+<!-- ===================== APPLICATION ===================== -->
+<div id="app-shell" class="hidden-force">
+<div class="flex h-screen overflow-hidden">
+
+  <aside class="hidden md:flex md:w-[76px] lg:w-[220px] flex-col ecorce-bg text-white shrink-0">
+    <div class="ecorce-lines h-full flex flex-col">
+      <div class="h-16 flex items-center gap-3 px-5 border-b border-white/10">
+        <div class="w-8 h-8 shrink-0 rounded-[6px] bg-white/95 text-forest font-display font-bold text-sm flex items-center justify-center">B</div>
+        <div class="hidden lg:block leading-tight">
+          <p class="font-display text-sm font-semibold tracking-wide">Hub Digital</p>
+          <p class="text-[11px] text-white/55">BCEG</p>
+        </div>
+      </div>
+      <nav class="flex-1 px-3 py-6 space-y-1">
+        <a href="#" data-view="dashboard" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/10 text-white text-sm font-medium">
+          <i data-lucide="layout-grid" class="w-[18px] h-[18px] shrink-0"></i>
+          <span class="hidden lg:inline">Habilitations</span>
+        </a>
+        <a href="#" data-view="new" id="nav-new" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/70 hover:bg-white/10 hover:text-white text-sm font-medium transition-colors">
+          <i data-lucide="file-plus-2" class="w-[18px] h-[18px] shrink-0"></i>
+          <span class="hidden lg:inline">Nouvelle demande</span>
+        </a>
+      </nav>
+      <div class="px-5 py-5 border-t border-white/10">
+        <p class="hidden lg:block text-[11px] uppercase tracking-[0.14em] text-white/45 font-display">Réinventons l'avenir</p>
+      </div>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col min-w-0">
+    <header class="h-16 shrink-0 flex items-center justify-between gap-4 px-5 md:px-8 border-b border-[--line] bg-surface/80 backdrop-blur">
+      <div class="min-w-0">
+        <h1 class="font-display font-semibold text-[15px] leading-tight truncate">Demandes d'habilitation</h1>
+        <p class="text-xs text-ink/45 truncate">Workflow Métier → SSI1 → SSI2 → DSI</p>
+      </div>
+      <div class="flex items-center gap-3 shrink-0">
+        <div class="flex items-center gap-2.5 pl-3 border-l border-[--line]">
+          <div id="user-avatar" class="w-8 h-8 rounded-full bg-forest text-white text-xs font-semibold flex items-center justify-center font-display">--</div>
+          <div class="hidden sm:block leading-tight">
+            <p id="user-name" class="text-[13px] font-medium">—</p>
+            <p id="user-role" class="text-[11px] text-ink/45">—</p>
+          </div>
+        </div>
+        <button id="logout-btn" class="w-9 h-9 rounded-full hover:bg-sage-soft flex items-center justify-center text-ink/50" title="Se déconnecter">
+          <i data-lucide="log-out" class="w-[17px] h-[17px]"></i>
+        </button>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto">
+
+      <section id="view-dashboard" class="view active">
+        <div class="px-5 md:px-8 pt-6 pb-3 flex items-center justify-between flex-wrap gap-3">
+          <p id="stats-line" class="text-sm text-ink/45">Chargement…</p>
+          <button data-view-btn="new" class="inline-flex items-center gap-2 bg-forest text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-forest-dark transition-colors">
+            <i data-lucide="plus" class="w-4 h-4"></i> Nouvelle demande
+          </button>
+        </div>
+        <div class="px-5 md:px-8 pb-10 overflow-x-auto">
+          <div class="flex gap-4 min-w-[1180px]">
+            <div class="flex-1 min-w-[220px]">
+              <div class="flex items-center gap-2 mb-3 px-1"><span class="w-2 h-2 rounded-full bg-sage"></span><h2 class="text-xs font-semibold uppercase tracking-wide text-ink/55">Demande · Métier</h2><span class="ml-auto text-xs text-ink/35 font-mono" id="count-demande">0</span></div>
+              <div class="space-y-3" id="col-demande"></div>
+            </div>
+            <div class="flex-1 min-w-[220px]">
+              <div class="flex items-center gap-2 mb-3 px-1"><span class="w-2 h-2 rounded-full bg-forest"></span><h2 class="text-xs font-semibold uppercase tracking-wide text-ink/55">Contrôle · SSI1</h2><span class="ml-auto text-xs text-ink/35 font-mono" id="count-ssi1">0</span></div>
+              <div class="space-y-3" id="col-ssi1"></div>
+            </div>
+            <div class="flex-1 min-w-[220px]">
+              <div class="flex items-center gap-2 mb-3 px-1"><span class="w-2 h-2 rounded-full bg-leaf"></span><h2 class="text-xs font-semibold uppercase tracking-wide text-ink/55">Traitement · SSI2</h2><span class="ml-auto text-xs text-ink/35 font-mono" id="count-ssi2">0</span></div>
+              <div class="space-y-3" id="col-ssi2"></div>
+            </div>
+            <div class="flex-1 min-w-[220px]">
+              <div class="flex items-center gap-2 mb-3 px-1"><span class="w-2 h-2 rounded-full bg-gold"></span><h2 class="text-xs font-semibold uppercase tracking-wide text-ink/55">Traitement · DSI</h2><span class="ml-auto text-xs text-ink/35 font-mono" id="count-dsi">0</span></div>
+              <div class="space-y-3" id="col-dsi"></div>
+            </div>
+            <div class="flex-1 min-w-[220px]">
+              <div class="flex items-center gap-2 mb-3 px-1"><span class="w-2 h-2 rounded-full bg-ink/30"></span><h2 class="text-xs font-semibold uppercase tracking-wide text-ink/55">Clôturée</h2><span class="ml-auto text-xs text-ink/35 font-mono" id="count-cloture">0</span></div>
+              <div class="space-y-3" id="col-cloture"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-new" class="view">
+        <div class="px-5 md:px-8 py-8 max-w-4xl mx-auto">
+          <div class="mb-6">
+            <p class="text-xs uppercase tracking-[0.12em] text-forest font-display font-semibold mb-1">Fiche de demande d'habilitation</p>
+            <h1 class="font-display text-2xl font-semibold">Nouvelle demande d'accès</h1>
+            <p class="text-sm text-ink/50 mt-1">Une fois envoyée, la demande est transmise directement au SSI1.</p>
+          </div>
+
+          <form id="new-request-form" class="space-y-6">
+            <div class="bg-surface rounded-xl border border-[--line] shadow-card p-5">
+              <h3 class="font-display font-semibold text-sm mb-4 flex items-center gap-2"><i data-lucide="layers" class="w-4 h-4 text-forest"></i> Application(s) souhaitée(s)</h3>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm" id="apps-checkboxes">
+                <label class="flex items-center gap-2"><input type="checkbox" value="Amplitude Bank"> Amplitude Bank</label>
+                <label class="flex items-center gap-2"><input type="checkbox" value="Amplitude Achats & Stocks"> Amplitude Achats &amp; Stocks</label>
+                <label class="flex items-center gap-2"><input type="checkbox" value="Amplitude Contentieux"> Amplitude Contentieux</label>
+                <label class="flex items-center gap-2"><input type="checkbox" value="Office 365"> Office 365</label>
+                <label class="flex items-center gap-2"><input type="checkbox" value="Internet"> Internet</label>
+                <label class="flex items-center gap-2"><input type="checkbox" value="Centrale des risques BEAC"> Centrale des risques BEAC</label>
+                <label class="flex items-center gap-2"><input type="checkbox" value="Factoring"> Factoring</label>
+                <label class="flex items-center gap-2"><input type="checkbox" value="BGFI Compliance"> BGFI Compliance</label>
+              </div>
+              <div class="mt-4">
+                <label class="text-xs text-ink/50 mb-1 block">Accès système / réseau (facultatif — serveurs, ports)</label>
+                <input id="f-acces" type="text" placeholder="Ex. Wallix, AD BCEG, Serveur Pointeuse…" class="w-full px-3 py-2 text-sm rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none">
+              </div>
+            </div>
+
+            <div class="bg-surface rounded-xl border border-[--line] shadow-card p-5">
+              <h3 class="font-display font-semibold text-sm mb-4 flex items-center gap-2"><i data-lucide="git-branch" class="w-4 h-4 text-forest"></i> Type de demande</h3>
+              <div class="flex flex-wrap gap-x-6 gap-y-3 text-sm">
+                <label class="flex items-center gap-2"><input type="radio" name="type" value="Création" checked> Création</label>
+                <label class="flex items-center gap-2"><input type="radio" name="type" value="Modification"> Modification</label>
+                <label class="flex items-center gap-2"><input type="radio" name="type" value="Prorogation"> Prorogation</label>
+                <label class="flex items-center gap-2"><input type="radio" name="type" value="Suspension"> Suspension</label>
+                <label class="flex items-center gap-2"><input type="radio" name="type" value="Habilitation temporaire"> Habilitation temporaire</label>
+              </div>
+              <div class="mt-4">
+                <label class="text-xs text-ink/50 mb-1 block">Motif de la demande</label>
+                <textarea id="f-motif" rows="2" required class="w-full px-3 py-2 text-sm rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none"></textarea>
+              </div>
+            </div>
+
+            <div class="bg-surface rounded-xl border border-[--line] shadow-card p-5">
+              <h3 class="font-display font-semibold text-sm mb-4 flex items-center gap-2"><i data-lucide="user-round" class="w-4 h-4 text-forest"></i> Renseignements concernant l'utilisateur</h3>
+              <div class="grid sm:grid-cols-2 gap-4 mb-4">
+                <div><label class="text-xs text-ink/50 mb-1 block">Code utilisateur</label><input id="f-code" class="w-full px-3 py-2 text-sm rounded-lg border border-[--line] font-mono focus:border-forest/50 focus:outline-none" maxlength="8"></div>
+                <div><label class="text-xs text-ink/50 mb-1 block">Nom et prénom de l'utilisateur</label><input id="f-demandeur" required class="w-full px-3 py-2 text-sm rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none"></div>
+              </div>
+              <div class="grid sm:grid-cols-2 gap-4 text-sm">
+                <div><label class="text-xs text-ink/50 mb-1 block">E-mail utilisateur (pour la notification finale)</label><input id="f-email" type="email" class="w-full px-3 py-2 rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none"></div>
+                <div><label class="text-xs text-ink/50 mb-1 block">Poste occupé</label><input id="f-poste" required class="w-full px-3 py-2 rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none"></div>
+                <div><label class="text-xs text-ink/50 mb-1 block">Direction</label><input id="f-direction" class="w-full px-3 py-2 rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none"></div>
+                <div><label class="text-xs text-ink/50 mb-1 block">Agence</label><input id="f-agence" class="w-full px-3 py-2 rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none"></div>
+                <div><label class="text-xs text-ink/50 mb-1 block">Département</label><input id="f-departement" class="w-full px-3 py-2 rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none"></div>
+                <div><label class="text-xs text-ink/50 mb-1 block">Service</label><input id="f-service" class="w-full px-3 py-2 rounded-lg border border-[--line] focus:border-forest/50 focus:outline-none"></div>
+              </div>
+            </div>
+
+            <p id="new-error" class="text-sm text-clay hidden"></p>
+            <div class="flex justify-end gap-3 pb-4">
+              <button type="button" data-view-btn="dashboard" class="px-4 py-2.5 rounded-lg text-sm font-medium text-ink/60 hover:bg-sage-soft transition-colors">Annuler</button>
+              <button type="submit" class="px-5 py-2.5 rounded-lg text-sm font-medium bg-forest text-white hover:bg-forest-dark transition-colors inline-flex items-center gap-2"><i data-lucide="send" class="w-4 h-4"></i> Envoyer au SSI1</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="drawer-overlay" class="fixed inset-0 bg-ink/25 backdrop-blur-[1px] z-30 hidden"></div>
+  <aside id="detail-panel" class="drawer drawer-hidden fixed top-0 right-0 h-full w-full sm:w-[440px] bg-surface z-40 shadow-panel overflow-y-auto">
+    <div id="detail-content"></div>
+  </aside>
+
+</div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
