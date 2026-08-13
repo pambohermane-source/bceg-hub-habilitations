@@ -68,7 +68,7 @@ async function boot() {
   document.getElementById("user-avatar").textContent = initials(ME.name);
   document.getElementById("user-name").textContent = ME.name;
   document.getElementById("user-role").textContent = roleLabel(ME.role);
-  if (ME.role !== "metier" && ME.role !== "admin") document.getElementById("nav-new").classList.add("hidden-force");
+  if (ME.role !== "metier" && ME.role !== "admin") { document.getElementById("nav-new").classList.add("hidden-force"); document.getElementById("new-request-btn").classList.add("hidden-force"); }
   lucide.createIcons();
   await loadRequests();
 }
