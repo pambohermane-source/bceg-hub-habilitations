@@ -44,7 +44,36 @@ async function migrate() {
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
     );
+
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS checklist JSONB NOT NULL DEFAULT '[]';
   `);
+}
+
+/* Checklist de sécurité SSI — 14 critères (base transmise par Daniel Koumba) */
+const CHECKLIST_TEMPLATE = [
+  { id: "dossier_complet", criterion: "Dossier d'habilitation complet" },
+  { id: "justification", criterion: "Justification métier explicite" },
+  { id: "doublon", criterion: "Vérification doublon demandes" },
+  { id: "classification", criterion: "Classification des données (PUBLIC/INT/CONF/TC)" },
+  { id: "cvss", criterion: "CVSS des accès demandés ≤ seuil" },
+  { id: "moindre_privilege", criterion: "Vérification du principe de moindre privilège" },
+  { id: "separation_duties", criterion: "Pas de conflit de séparation des tâches" },
+  { id: "rgpd", criterion: "Conformité RGPD" },
+  { id: "pci_dss", criterion: "Conformité PCI-DSS (si monétique)" },
+  { id: "iso27001", criterion: "Conformité ISO 27001" },
+  { id: "mfa", criterion: "MFA activé" },
+  { id: "siem_logging", criterion: "Logging SIEM configuré" },
+  { id: "alertes", criterion: "Alertes anomalies définies" },
+  { id: "audit_trail", criterion: "Audit trail complet" },
+];
+
+function defaultChecklist() {
+  return CHECKLIST_TEMPLATE.map((c) => ({
+    ...c,
+    status: "a_faire", // 'valide' | 'en_cours' | 'a_faire' | 'na'
+    responsible: "",
+    comment: "",
+  }));
 }
 
 async function nextRef() {
@@ -53,4 +82,4 @@ async function nextRef() {
   return `REQ-${year}-${String(rows[0].n).padStart(4, "0")}`;
 }
 
-module.exports = { pool, migrate, nextRef };
+module.exports = { pool, migrate, nextRef, defaultChecklist };

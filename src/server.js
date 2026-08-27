@@ -1,7 +1,7 @@
 require("dotenv").config();
 const path = require("path");
 const express = require("express");
-const { pool, migrate, nextRef } = require("./db");
+const { pool, migrate, nextRef, defaultChecklist } = require("./db");
 const { hashPassword, verifyPassword, signToken, requireAuth, requireRole } = require("./auth");
 const { sendFinalNotification } = require("./mailer");
 
@@ -62,13 +62,13 @@ app.post("/api/requests", requireAuth, requireRole("metier", "admin"), async (re
   ];
   const { rows } = await pool.query(
     `INSERT INTO requests
-      (ref, demandeur, user_email, poste, direction, agence, departement, service, type_demande, motif, apps, code_utilisateur, stage, badge, timeline, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'ssi1',NULL,$13,$14)
+      (ref, demandeur, user_email, poste, direction, agence, departement, service, type_demande, motif, apps, code_utilisateur, stage, badge, timeline, checklist, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'ssi1',NULL,$13,$14,$15)
      RETURNING *`,
     [
       ref, b.demandeur, b.user_email || null, b.poste, b.direction, b.agence, b.departement,
       b.service, b.type_demande, b.motif, JSON.stringify(b.apps || []), b.code_utilisateur,
-      JSON.stringify(timeline), req.user.id,
+      JSON.stringify(timeline), JSON.stringify(defaultChecklist()), req.user.id,
     ]
   );
   res.status(201).json({ request: rows[0] });
@@ -98,6 +98,35 @@ app.post("/api/requests/:id/resend", requireAuth, requireRole("metier", "admin")
 });
 
 /* ---------------------------------------------------------------- */
+/*  Checklist de sécurité SSI (14 critères)                          */
+/* ---------------------------------------------------------------- */
+
+app.patch("/api/requests/:id/checklist", requireAuth, requireRole("ssi1", "ssi2", "admin"), async (req, res) => {
+  const { itemId, status, responsible, comment } = req.body || {};
+  const validStatuses = ["valide", "en_cours", "a_faire", "na"];
+  if (status !== undefined && !validStatuses.includes(status)) {
+    return res.status(400).json({ error: "Statut de critère invalide." });
+  }
+  if (!itemId) return res.status(400).json({ error: "Critère non identifié." });
+
+  const { rows } = await pool.query("SELECT * FROM requests WHERE id = $1", [req.params.id]);
+  const r = rows[0];
+  if (!r) return res.status(404).json({ error: "Demande introuvable." });
+
+  const checklist = (r.checklist || []).map((c) =>
+    c.id === itemId
+      ? { ...c, status: status !== undefined ? status : c.status, responsible: responsible ?? c.responsible, comment: comment ?? c.comment }
+      : c
+  );
+
+  const { rows: updated } = await pool.query(
+    `UPDATE requests SET checklist = $1, updated_at = now() WHERE id = $2 RETURNING *`,
+    [JSON.stringify(checklist), r.id]
+  );
+  res.json({ request: updated[0] });
+});
+
+/* ---------------------------------------------------------------- */
 /*  Circuit de validation : SSI1 → SSI2 → DSI → SSI2 (info) → clôture */
 /* ---------------------------------------------------------------- */
 
@@ -118,6 +147,12 @@ app.post("/api/requests/:id/action", requireAuth, async (req, res) => {
   if (r.stage === "ssi1" && !r.badge) {
     if (role !== "ssi1" && role !== "admin") return res.status(403).json({ error: "Réservé au SSI1." });
     if (action === "validate") {
+      const restants = (r.checklist || []).filter((c) => c.status !== "valide" && c.status !== "na");
+      if (restants.length > 0) {
+        return res.status(409).json({
+          error: `Checklist de sécurité incomplète : ${restants.length} critère(s) restant(s) (${restants.map((c) => c.criterion).slice(0, 3).join(", ")}${restants.length > 3 ? "…" : ""}).`,
+        });
+      }
       timeline.push({ label: "Contrôle SSI1", actor: `${actor} — visa OK`, date: now(), state: "done" });
       timeline.push({ label: "Traitement SSI2", actor: "en attente", date: "—", state: "current" });
       newStage = "ssi2"; newBadge = null;

@@ -68,7 +68,10 @@ async function boot() {
   document.getElementById("user-avatar").textContent = initials(ME.name);
   document.getElementById("user-name").textContent = ME.name;
   document.getElementById("user-role").textContent = roleLabel(ME.role);
-  if (ME.role !== "metier" && ME.role !== "admin") { document.getElementById("nav-new").classList.add("hidden-force"); document.getElementById("new-request-btn").classList.add("hidden-force"); }
+  if (ME.role !== "metier" && ME.role !== "admin") {
+    document.getElementById("nav-new").classList.add("hidden-force");
+    document.getElementById("new-request-btn").classList.add("hidden-force");
+  }
   lucide.createIcons();
   await loadRequests();
 }
@@ -130,7 +133,9 @@ function renderBoard() {
       </div>
       <div class="flex items-center justify-between mt-3 pt-3 border-t border-[--line]">
         <span class="text-[11px] text-ink/45">${r.direction || "—"}</span>
-        <span class="text-[11px] font-medium bg-sage-soft text-forest px-2 py-0.5 rounded-full">${(r.type_demande || "").split(" ")[0] || "—"}</span>
+        ${r.stage === "ssi1" && !r.badge && (r.checklist || []).length
+          ? `<span class="text-[11px] font-mono text-ink/40">${(r.checklist || []).filter((c) => c.status === "valide" || c.status === "na").length}/${(r.checklist || []).length} checklist</span>`
+          : `<span class="text-[11px] font-medium bg-sage-soft text-forest px-2 py-0.5 rounded-full">${(r.type_demande || "").split(" ")[0] || "—"}</span>`}
       </div>`;
     card.addEventListener("click", () => openDetail(r.id));
     document.getElementById(colId).appendChild(card);
@@ -182,6 +187,73 @@ function renderTimeline(steps) {
 /*  Panneau de détail + actions                                       */
 /* ---------------------------------------------------------------- */
 
+const checklistStatusMeta = {
+  valide: { label: "Validé", cls: "bg-leaf/15 text-leaf" },
+  en_cours: { label: "En cours", cls: "bg-gold/15 text-gold" },
+  a_faire: { label: "À faire", cls: "bg-ink/10 text-ink/50" },
+  na: { label: "N/A", cls: "bg-sage-soft text-ink/40" },
+};
+
+function renderChecklist(r) {
+  const items = r.checklist || [];
+  const done = items.filter((c) => c.status === "valide" || c.status === "na").length;
+  const canEdit = ME.role === "ssi1" || ME.role === "ssi2" || ME.role === "admin";
+  const rows = items.map((c) => {
+    const meta = checklistStatusMeta[c.status] || checklistStatusMeta.a_faire;
+    const options = Object.entries(checklistStatusMeta)
+      .map(([val, m]) => `<option value="${val}" ${c.status === val ? "selected" : ""}>${m.label}</option>`)
+      .join("");
+    return `
+      <div class="border border-[--line] rounded-lg p-3">
+        <div class="flex items-start justify-between gap-2 mb-2">
+          <p class="text-[12.5px] font-medium leading-snug">${c.criterion}</p>
+          ${canEdit
+            ? `<select data-checklist-id="${c.id}" class="checklist-status text-[11px] font-medium rounded-full px-2 py-1 border-0 ${meta.cls}">${options}</select>`
+            : `<span class="text-[11px] font-medium px-2 py-1 rounded-full shrink-0 ${meta.cls}">${meta.label}</span>`}
+        </div>
+        ${canEdit ? `
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            <input data-checklist-id="${c.id}" data-field="responsible" placeholder="Responsable" value="${c.responsible || ""}" class="checklist-field text-[11px] px-2 py-1.5 rounded-md border border-[--line] focus:border-forest/50 focus:outline-none">
+            <input data-checklist-id="${c.id}" data-field="comment" placeholder="Commentaire" value="${c.comment || ""}" class="checklist-field text-[11px] px-2 py-1.5 rounded-md border border-[--line] focus:border-forest/50 focus:outline-none">
+          </div>` : (c.responsible || c.comment) ? `<p class="text-[11px] text-ink/45 mt-1">${c.responsible || ""}${c.responsible && c.comment ? " — " : ""}${c.comment || ""}</p>` : ""}
+      </div>`;
+  }).join("");
+  return `
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-ink/50">Checklist de sécurité SSI</h3>
+      <span class="text-[11px] font-mono text-ink/40">${done}/${items.length} validés</span>
+    </div>
+    <div class="space-y-2">${rows}</div>`;
+}
+
+function bindChecklistEvents(requestId, container) {
+  const debouncers = {};
+  const save = async (itemId, patch) => {
+    try {
+      await api(`/requests/${requestId}/checklist`, { method: "PATCH", body: JSON.stringify({ itemId, ...patch }) });
+    } catch (err) {
+      document.getElementById("action-error").textContent = err.message;
+      document.getElementById("action-error").classList.remove("hidden");
+    }
+  };
+  container.querySelectorAll(".checklist-status").forEach((sel) => {
+    sel.addEventListener("change", async () => {
+      await save(sel.dataset.checklistId, { status: sel.value });
+      const meta = checklistStatusMeta[sel.value];
+      sel.className = `checklist-status text-[11px] font-medium rounded-full px-2 py-1 border-0 ${meta.cls}`;
+    });
+  });
+  container.querySelectorAll(".checklist-field").forEach((input) => {
+    input.addEventListener("input", () => {
+      const id = input.dataset.checklistId;
+      clearTimeout(debouncers[id + input.dataset.field]);
+      debouncers[id + input.dataset.field] = setTimeout(() => {
+        save(id, { [input.dataset.field]: input.value });
+      }, 500);
+    });
+  });
+}
+
 function actionButtons(r) {
   const role = ME.role;
   const btn = (label, cls, handler, needsNote = false) =>
@@ -227,6 +299,7 @@ async function openDetail(id) {
         <h3 class="text-xs font-semibold uppercase tracking-wide text-ink/50 mb-3">Suivi du dossier</h3>
         <div>${renderTimeline(r.timeline)}</div>
       </div>
+      <div id="checklist-section">${renderChecklist(r)}</div>
       <div class="grid grid-cols-2 gap-3 text-[12px]">
         <div class="bg-sage-soft rounded-lg px-3 py-2.5"><p class="text-ink/45 mb-0.5">Type de demande</p><p class="font-medium">${r.type_demande || "—"}</p></div>
         <div class="bg-sage-soft rounded-lg px-3 py-2.5"><p class="text-ink/45 mb-0.5">Code utilisateur</p><p class="font-mono font-medium">${r.code_utilisateur || "—"}</p></div>
@@ -252,6 +325,7 @@ async function openDetail(id) {
     </div>`;
   document.getElementById("close-detail").addEventListener("click", closeDetail);
   content.querySelectorAll(".action-btn").forEach((b) => b.addEventListener("click", () => runAction(r.id, b)));
+  bindChecklistEvents(r.id, document.getElementById("checklist-section"));
   lucide.createIcons();
   document.getElementById("detail-panel").classList.remove("drawer-hidden");
   document.getElementById("drawer-overlay").classList.remove("hidden");
