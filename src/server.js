@@ -98,10 +98,10 @@ app.post("/api/requests/:id/resend", requireAuth, requireRole("metier", "admin")
 });
 
 /* ---------------------------------------------------------------- */
-/*  Checklist de sécurité SSI (14 critères)                          */
+/*  Checklist de sécurité SSI (14 critères, chacun rattaché à un rôle)*/
 /* ---------------------------------------------------------------- */
 
-app.patch("/api/requests/:id/checklist", requireAuth, requireRole("ssi1", "ssi2", "admin"), async (req, res) => {
+app.patch("/api/requests/:id/checklist", requireAuth, async (req, res) => {
   const { itemId, status, responsible, comment } = req.body || {};
   const validStatuses = ["valide", "en_cours", "a_faire", "na"];
   if (status !== undefined && !validStatuses.includes(status)) {
@@ -113,6 +113,15 @@ app.patch("/api/requests/:id/checklist", requireAuth, requireRole("ssi1", "ssi2"
   const r = rows[0];
   if (!r) return res.status(404).json({ error: "Demande introuvable." });
 
+  const target = (r.checklist || []).find((c) => c.id === itemId);
+  if (!target) return res.status(404).json({ error: "Critère introuvable sur ce dossier." });
+
+  const role = req.user.role;
+  const canEdit = role === "admin" || role === "ssi1" || role === target.role;
+  if (!canEdit) {
+    return res.status(403).json({ error: `Ce critère est réservé au rôle ${target.role}.` });
+  }
+
   const checklist = (r.checklist || []).map((c) =>
     c.id === itemId
       ? { ...c, status: status !== undefined ? status : c.status, responsible: responsible ?? c.responsible, comment: comment ?? c.comment }
@@ -122,6 +131,31 @@ app.patch("/api/requests/:id/checklist", requireAuth, requireRole("ssi1", "ssi2"
   const { rows: updated } = await pool.query(
     `UPDATE requests SET checklist = $1, updated_at = now() WHERE id = $2 RETURNING *`,
     [JSON.stringify(checklist), r.id]
+  );
+  res.json({ request: updated[0] });
+});
+
+/* ---------------------------------------------------------------- */
+/*  Approbation CISO (préalable à la transmission SSI1 → SSI2)       */
+/* ---------------------------------------------------------------- */
+
+app.patch("/api/requests/:id/ciso", requireAuth, requireRole("ciso", "admin"), async (req, res) => {
+  const { approved, note } = req.body || {};
+  const { rows } = await pool.query("SELECT * FROM requests WHERE id = $1", [req.params.id]);
+  const r = rows[0];
+  if (!r) return res.status(404).json({ error: "Demande introuvable." });
+  if (r.stage !== "ssi1") {
+    return res.status(409).json({ error: "L'approbation CISO ne s'applique qu'au contrôle SSI1." });
+  }
+
+  let timeline = [...r.timeline];
+  if (approved) {
+    timeline.push({ label: "Approbation CISO", actor: `${req.user.name} — approuvé`, date: now(), state: "done" });
+  }
+
+  const { rows: updated } = await pool.query(
+    `UPDATE requests SET ciso_approved = $1, ciso_note = $2, timeline = $3, updated_at = now() WHERE id = $4 RETURNING *`,
+    [!!approved, note || "", JSON.stringify(timeline), r.id]
   );
   res.json({ request: updated[0] });
 });
@@ -152,6 +186,9 @@ app.post("/api/requests/:id/action", requireAuth, async (req, res) => {
         return res.status(409).json({
           error: `Checklist de sécurité incomplète : ${restants.length} critère(s) restant(s) (${restants.map((c) => c.criterion).slice(0, 3).join(", ")}${restants.length > 3 ? "…" : ""}).`,
         });
+      }
+      if (!r.ciso_approved) {
+        return res.status(409).json({ error: "Approbation du CISO requise avant transmission au SSI2." });
       }
       timeline.push({ label: "Contrôle SSI1", actor: `${actor} — visa OK`, date: now(), state: "done" });
       timeline.push({ label: "Traitement SSI2", actor: "en attente", date: "—", state: "current" });

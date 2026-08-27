@@ -5,7 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "add-roles": "node src/add-roles.js"
   },
   "engines": {
     "node": ">=18"

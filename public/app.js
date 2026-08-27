@@ -76,8 +76,23 @@ async function boot() {
   await loadRequests();
 }
 
+const ROLE_LABELS = {
+  metier: "Métier",
+  ssi1: "SSI · Contrôle sécurité",
+  ssi2: "SSI · Traitement",
+  dsi: "DSI",
+  admin: "Administrateur",
+  ciso: "CISO",
+  analyste_ssi: "Analyste SSI",
+  analyste_risque: "Analyste Risque",
+  gestionnaire_iam: "Gestionnaire IAM",
+  compliance: "Compliance",
+  admin_ad: "Admin AD",
+  admin_siem: "Admin SIEM",
+  chef_projet: "Chef Projet",
+};
 function roleLabel(role) {
-  return { metier: "Métier", ssi1: "SSI · Contrôle sécurité", ssi2: "SSI · Traitement", dsi: "DSI", admin: "Administrateur" }[role] || role;
+  return ROLE_LABELS[role] || role;
 }
 
 /* ---------------------------------------------------------------- */
@@ -134,7 +149,7 @@ function renderBoard() {
       <div class="flex items-center justify-between mt-3 pt-3 border-t border-[--line]">
         <span class="text-[11px] text-ink/45">${r.direction || "—"}</span>
         ${r.stage === "ssi1" && !r.badge && (r.checklist || []).length
-          ? `<span class="text-[11px] font-mono text-ink/40">${(r.checklist || []).filter((c) => c.status === "valide" || c.status === "na").length}/${(r.checklist || []).length} checklist</span>`
+          ? `<span class="text-[11px] font-mono text-ink/40">${(r.checklist || []).filter((c) => c.status === "valide" || c.status === "na").length}/${(r.checklist || []).length} checklist${r.ciso_approved ? " · CISO ✓" : ""}</span>`
           : `<span class="text-[11px] font-medium bg-sage-soft text-forest px-2 py-0.5 rounded-full">${(r.type_demande || "").split(" ")[0] || "—"}</span>`}
       </div>`;
     card.addEventListener("click", () => openDetail(r.id));
@@ -197,20 +212,21 @@ const checklistStatusMeta = {
 function renderChecklist(r) {
   const items = r.checklist || [];
   const done = items.filter((c) => c.status === "valide" || c.status === "na").length;
-  const canEdit = ME.role === "ssi1" || ME.role === "ssi2" || ME.role === "admin";
   const rows = items.map((c) => {
     const meta = checklistStatusMeta[c.status] || checklistStatusMeta.a_faire;
+    const canEdit = ME.role === "admin" || ME.role === "ssi1" || ME.role === c.role;
     const options = Object.entries(checklistStatusMeta)
       .map(([val, m]) => `<option value="${val}" ${c.status === val ? "selected" : ""}>${m.label}</option>`)
       .join("");
     return `
       <div class="border border-[--line] rounded-lg p-3">
-        <div class="flex items-start justify-between gap-2 mb-2">
+        <div class="flex items-start justify-between gap-2 mb-1">
           <p class="text-[12.5px] font-medium leading-snug">${c.criterion}</p>
           ${canEdit
             ? `<select data-checklist-id="${c.id}" class="checklist-status text-[11px] font-medium rounded-full px-2 py-1 border-0 ${meta.cls}">${options}</select>`
             : `<span class="text-[11px] font-medium px-2 py-1 rounded-full shrink-0 ${meta.cls}">${meta.label}</span>`}
         </div>
+        <p class="text-[10px] text-ink/35 mb-1">${roleLabel(c.role)}</p>
         ${canEdit ? `
           <div class="grid grid-cols-2 gap-2 mt-2">
             <input data-checklist-id="${c.id}" data-field="responsible" placeholder="Responsable" value="${c.responsible || ""}" class="checklist-field text-[11px] px-2 py-1.5 rounded-md border border-[--line] focus:border-forest/50 focus:outline-none">
@@ -251,6 +267,46 @@ function bindChecklistEvents(requestId, container) {
         save(id, { [input.dataset.field]: input.value });
       }, 500);
     });
+  });
+}
+
+/* ---------------------------------------------------------------- */
+/*  Approbation CISO                                                  */
+/* ---------------------------------------------------------------- */
+
+function renderCiso(r) {
+  if (r.stage !== "ssi1") return "";
+  const canDecide = ME.role === "ciso" || ME.role === "admin";
+  const status = r.ciso_approved
+    ? `<span class="text-[11px] font-medium px-2 py-1 rounded-full bg-leaf/15 text-leaf">Approuvé</span>`
+    : `<span class="text-[11px] font-medium px-2 py-1 rounded-full bg-ink/10 text-ink/50">En attente</span>`;
+  return `
+    <div class="border border-[--line] rounded-lg p-3">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-[12.5px] font-medium">Approbation CISO</p>
+        ${status}
+      </div>
+      ${r.ciso_note ? `<p class="text-[11px] text-ink/45 mb-2">${r.ciso_note}</p>` : ""}
+      ${canDecide && !r.ciso_approved ? `
+        <textarea id="ciso-note" rows="2" placeholder="Note (optionnel)" class="w-full text-[11px] px-2 py-1.5 rounded-md border border-[--line] focus:border-forest/50 focus:outline-none mb-2">${r.ciso_note || ""}</textarea>
+        <button id="ciso-approve-btn" class="w-full text-[12px] font-medium px-3 py-2 rounded-lg bg-forest text-white hover:bg-forest-dark transition-colors">Approuver</button>
+      ` : ""}
+    </div>`;
+}
+
+function bindCisoEvents(requestId, container) {
+  const btn = container.querySelector("#ciso-approve-btn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const note = container.querySelector("#ciso-note")?.value.trim() || "";
+    try {
+      await api(`/requests/${requestId}/ciso`, { method: "PATCH", body: JSON.stringify({ approved: true, note }) });
+      await openDetail(requestId);
+      await loadRequests();
+    } catch (err) {
+      document.getElementById("action-error").textContent = err.message;
+      document.getElementById("action-error").classList.remove("hidden");
+    }
   });
 }
 
@@ -300,6 +356,7 @@ async function openDetail(id) {
         <div>${renderTimeline(r.timeline)}</div>
       </div>
       <div id="checklist-section">${renderChecklist(r)}</div>
+      <div id="ciso-section">${renderCiso(r)}</div>
       <div class="grid grid-cols-2 gap-3 text-[12px]">
         <div class="bg-sage-soft rounded-lg px-3 py-2.5"><p class="text-ink/45 mb-0.5">Type de demande</p><p class="font-medium">${r.type_demande || "—"}</p></div>
         <div class="bg-sage-soft rounded-lg px-3 py-2.5"><p class="text-ink/45 mb-0.5">Code utilisateur</p><p class="font-mono font-medium">${r.code_utilisateur || "—"}</p></div>
@@ -326,6 +383,7 @@ async function openDetail(id) {
   document.getElementById("close-detail").addEventListener("click", closeDetail);
   content.querySelectorAll(".action-btn").forEach((b) => b.addEventListener("click", () => runAction(r.id, b)));
   bindChecklistEvents(r.id, document.getElementById("checklist-section"));
+  bindCisoEvents(r.id, document.getElementById("ciso-section"));
   lucide.createIcons();
   document.getElementById("detail-panel").classList.remove("drawer-hidden");
   document.getElementById("drawer-overlay").classList.remove("hidden");

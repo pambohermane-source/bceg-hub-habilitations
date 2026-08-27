@@ -10,6 +10,13 @@ const pool = new Pool({
   ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : false,
 });
 
+/* Rôles disponibles dans le Hub Digital */
+const ROLES = [
+  "metier", "ssi1", "ssi2", "dsi", "admin",
+  "ciso", "analyste_ssi", "analyste_risque", "gestionnaire_iam",
+  "compliance", "admin_ad", "admin_siem", "chef_projet",
+];
+
 async function migrate() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -17,7 +24,7 @@ async function migrate() {
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('metier','ssi1','ssi2','dsi','admin')),
+      role TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT now()
     );
 
@@ -46,25 +53,31 @@ async function migrate() {
     );
 
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS checklist JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS ciso_approved BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS ciso_note TEXT NOT NULL DEFAULT '';
+
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+    ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN (${ROLES.map((r) => `'${r}'`).join(",")}));
   `);
 }
 
-/* Checklist de sécurité SSI — 14 critères (base transmise par Daniel Koumba) */
+/* Checklist de sécurité SSI — 14 critères, chacun rattaché au rôle qui en est responsable
+   (base transmise par Daniel Koumba) */
 const CHECKLIST_TEMPLATE = [
-  { id: "dossier_complet", criterion: "Dossier d'habilitation complet" },
-  { id: "justification", criterion: "Justification métier explicite" },
-  { id: "doublon", criterion: "Vérification doublon demandes" },
-  { id: "classification", criterion: "Classification des données (PUBLIC/INT/CONF/TC)" },
-  { id: "cvss", criterion: "CVSS des accès demandés ≤ seuil" },
-  { id: "moindre_privilege", criterion: "Vérification du principe de moindre privilège" },
-  { id: "separation_duties", criterion: "Pas de conflit de séparation des tâches" },
-  { id: "rgpd", criterion: "Conformité RGPD" },
-  { id: "pci_dss", criterion: "Conformité PCI-DSS (si monétique)" },
-  { id: "iso27001", criterion: "Conformité ISO 27001" },
-  { id: "mfa", criterion: "MFA activé" },
-  { id: "siem_logging", criterion: "Logging SIEM configuré" },
-  { id: "alertes", criterion: "Alertes anomalies définies" },
-  { id: "audit_trail", criterion: "Audit trail complet" },
+  { id: "dossier_complet", criterion: "Dossier d'habilitation complet", role: "chef_projet" },
+  { id: "justification", criterion: "Justification métier explicite", role: "chef_projet" },
+  { id: "doublon", criterion: "Vérification doublon demandes", role: "analyste_ssi" },
+  { id: "classification", criterion: "Classification des données (PUBLIC/INT/CONF/TC)", role: "analyste_ssi" },
+  { id: "cvss", criterion: "CVSS des accès demandés ≤ seuil", role: "analyste_risque" },
+  { id: "moindre_privilege", criterion: "Vérification du principe de moindre privilège", role: "gestionnaire_iam" },
+  { id: "separation_duties", criterion: "Pas de conflit de séparation des tâches", role: "analyste_ssi" },
+  { id: "rgpd", criterion: "Conformité RGPD", role: "compliance" },
+  { id: "pci_dss", criterion: "Conformité PCI-DSS (si monétique)", role: "compliance" },
+  { id: "iso27001", criterion: "Conformité ISO 27001", role: "compliance" },
+  { id: "mfa", criterion: "MFA activé", role: "admin_ad" },
+  { id: "siem_logging", criterion: "Logging SIEM configuré", role: "admin_siem" },
+  { id: "alertes", criterion: "Alertes anomalies définies", role: "admin_siem" },
+  { id: "audit_trail", criterion: "Audit trail complet", role: "admin_siem" },
 ];
 
 function defaultChecklist() {
@@ -82,4 +95,4 @@ async function nextRef() {
   return `REQ-${year}-${String(rows[0].n).padStart(4, "0")}`;
 }
 
-module.exports = { pool, migrate, nextRef, defaultChecklist };
+module.exports = { pool, migrate, nextRef, defaultChecklist, ROLES };
